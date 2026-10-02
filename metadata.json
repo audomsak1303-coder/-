@@ -1,0 +1,8 @@
+{
+  "name": "Smart Expense & Installment Planner",
+  "description": "วางแผนและคำนวณค่าใช้จ่ายรายเดือน ค่าใช้จ่ายคงที่ และค่างวดผ่อนชำระแยกตามแอพ (Shopee, Lazada, Thisshop, AEON, SEasyCash ฯลฯ) พร้อมสรุปล่วงหน้า 24 เดือนและเชื่อมต่อ Google Sheets",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
