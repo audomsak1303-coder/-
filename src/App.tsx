@@ -25,6 +25,8 @@ import {
   loadProfile, 
   saveProfile, 
   calculate24MonthsForecast,
+  getInstallmentRemainingDebt,
+  getInstallmentDueAmount,
   DEFAULT_FIXED_EXPENSES,
   DEFAULT_INSTALLMENTS,
   DEFAULT_PROFILE
@@ -114,8 +116,7 @@ export default function App() {
         ? item.paidMonths
         : Math.max(0, (item.currentMonthIndex || 1) - 1);
       if (paid >= item.totalMonths) return sum;
-      const remainingMonths = Math.max(0, item.totalMonths - paid);
-      return sum + (item.remainingAmount ?? item.monthlyAmount * remainingMonths);
+      return sum + getInstallmentRemainingDebt(item);
     }, 0);
   }, [installments]);
 
@@ -241,16 +242,14 @@ export default function App() {
         if (i.id === id) {
           const clampedPaid = Math.min(i.totalMonths, Math.max(0, newPaid));
           const isCompleted = clampedPaid >= i.totalMonths;
-          const remainingMonths = Math.max(0, i.totalMonths - clampedPaid);
-          const remainingAmount = isCompleted ? 0 : i.monthlyAmount * remainingMonths;
-
-          return {
+          const updatedItem = {
             ...i,
             paidMonths: clampedPaid,
             currentMonthIndex: Math.min(i.totalMonths, clampedPaid + 1),
-            remainingAmount,
             isCompleted,
           };
+          updatedItem.remainingAmount = getInstallmentRemainingDebt(updatedItem);
+          return updatedItem;
         }
         return i;
       })

@@ -5,13 +5,14 @@ import {
   Edit3, 
   Calendar, 
   CheckCircle2, 
-  RotateCcw,
   ChevronDown,
   ChevronUp,
   Archive,
-  CreditCard
+  CreditCard,
+  SlidersHorizontal
 } from 'lucide-react';
 import { AppProvider, InstallmentItem } from '../types/finance';
+import { getInstallmentDueAmount, getInstallmentRemainingDebt } from '../lib/storage';
 
 interface InstallmentsSectionProps {
   installments: InstallmentItem[];
@@ -82,7 +83,6 @@ export const InstallmentsSection: React.FC<InstallmentsSectionProps> = ({
     { key: 'อื่นๆ', label: 'อื่นๆ' },
   ];
 
-  // Helper to test if item is 100% completed
   const isItemCompleted = (item: InstallmentItem) => {
     const paid = typeof item.paidMonths === 'number'
       ? item.paidMonths
@@ -90,7 +90,6 @@ export const InstallmentsSection: React.FC<InstallmentsSectionProps> = ({
     return paid >= item.totalMonths;
   };
 
-  // Filter by app tab
   const tabFiltered = installments.filter((item) => {
     if (selectedFilter === 'all') return true;
     if (selectedFilter === 'อื่นๆ') {
@@ -99,11 +98,13 @@ export const InstallmentsSection: React.FC<InstallmentsSectionProps> = ({
     return item.provider === selectedFilter;
   });
 
-  // Requirement: เมื่อครบ 100% แล้วยุบหายไป (แยก active vs completed)
   const activeItems = tabFiltered.filter((item) => !isItemCompleted(item));
   const completedItems = tabFiltered.filter((item) => isItemCompleted(item));
 
-  const totalMonthlyActive = activeItems.reduce((sum, item) => sum + item.monthlyAmount, 0);
+  // Current month active payment
+  const totalMonthlyActive = activeItems.reduce((sum, item) => {
+    return sum + getInstallmentDueAmount(item, 0);
+  }, 0);
 
   return (
     <div className="bg-white rounded-3xl border border-zinc-200/90 shadow-2xs overflow-hidden">
@@ -120,7 +121,7 @@ export const InstallmentsSection: React.FC<InstallmentsSectionProps> = ({
             </span>
           </div>
           <p className="text-2xs text-zinc-400 mt-1">
-            Shopee, SEasyCash, Lazada, Thisshop, AEON (ผ่อนครบ 100% จะยุบเก็บอัตโนมัติ)
+            Shopee, SEasyCash, Lazada, Thisshop, AEON (3, 6, 12, 18, 24 เดือน / ค่างวดไม่เท่ากัน)
           </p>
         </div>
 
@@ -200,7 +201,10 @@ export const InstallmentsSection: React.FC<InstallmentsSectionProps> = ({
             
             const percent = Math.min(100, Math.round((paid / item.totalMonths) * 100));
             const remainingMonths = Math.max(0, item.totalMonths - paid);
-            const remainingDebt = item.remainingAmount ?? item.monthlyAmount * remainingMonths;
+            
+            // Amount due for current month
+            const currentDueAmount = getInstallmentDueAmount(item, 0);
+            const remainingDebt = getInstallmentRemainingDebt(item);
 
             return (
               <div
@@ -208,11 +212,19 @@ export const InstallmentsSection: React.FC<InstallmentsSectionProps> = ({
                 className="bg-white rounded-2xl border border-zinc-200 hover:border-zinc-300 p-4 transition shadow-2xs hover:shadow-xs flex flex-col justify-between"
               >
                 <div>
-                  {/* Top Bar: Provider Badge + Actions */}
+                  {/* Top Bar: Provider Badge + Unequal Indicator + Actions */}
                   <div className="flex items-center justify-between gap-2">
-                    <span className={`text-3xs font-bold px-2.5 py-0.5 rounded-lg tracking-wider ${config.badgeClass}`}>
-                      {item.provider === 'อื่นๆ' ? item.customProviderName || 'อื่นๆ' : config.short}
-                    </span>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className={`text-3xs font-bold px-2.5 py-0.5 rounded-lg tracking-wider ${config.badgeClass}`}>
+                        {item.provider === 'อื่นๆ' ? item.customProviderName || 'อื่นๆ' : config.short}
+                      </span>
+                      {item.isCustomAmounts && (
+                        <span className="text-3xs font-bold px-2 py-0.5 rounded-lg bg-orange-50 text-orange-700 border border-orange-200/80 flex items-center gap-1">
+                          <SlidersHorizontal className="w-3 h-3 text-orange-500" />
+                          ค่างวดไม่เท่ากัน
+                        </span>
+                      )}
+                    </div>
 
                     <div className="flex items-center gap-1">
                       <button
@@ -241,9 +253,11 @@ export const InstallmentsSection: React.FC<InstallmentsSectionProps> = ({
                   <div className="mt-2 flex items-baseline justify-between">
                     <div>
                       <span className="text-xl font-extrabold text-zinc-900 tracking-tight">
-                        ฿{item.monthlyAmount.toLocaleString()}
+                        ฿{currentDueAmount.toLocaleString()}
                       </span>
-                      <span className="text-2xs text-zinc-400"> /งวด</span>
+                      <span className="text-2xs text-zinc-400">
+                        {item.isCustomAmounts ? ' /งวดนี้' : ' /งวด'}
+                      </span>
                     </div>
 
                     <div className="text-right">
@@ -258,7 +272,7 @@ export const InstallmentsSection: React.FC<InstallmentsSectionProps> = ({
                   <div className="mt-3">
                     <div className="flex items-center justify-between text-2xs mb-1">
                       <span className="font-semibold text-zinc-600">
-                        งวดที่ {paid + 1} จาก {item.totalMonths}
+                        งวดที่ {paid + 1} จาก {item.totalMonths} เดือน
                       </span>
                       <span className="font-bold text-orange-600">
                         {percent}% (เหลือ {remainingMonths} งวด)
@@ -273,7 +287,7 @@ export const InstallmentsSection: React.FC<InstallmentsSectionProps> = ({
                     </div>
                   </div>
 
-                  {/* Due Date */}
+                  {/* Due Date & Notes */}
                   <div className="mt-3 pt-2 border-t border-zinc-100 flex items-center justify-between text-2xs text-zinc-400">
                     <span className="flex items-center gap-1 font-medium text-zinc-500">
                       <Calendar className="w-3 h-3 text-zinc-300" />
@@ -304,7 +318,6 @@ export const InstallmentsSection: React.FC<InstallmentsSectionProps> = ({
                     </span>
                   </div>
 
-                  {/* When paying last installment, it becomes 100% and collapses! */}
                   <button
                     type="button"
                     onClick={() => onUpdatePaidMonths(item.id, paid + 1)}
@@ -354,7 +367,7 @@ export const InstallmentsSection: React.FC<InstallmentsSectionProps> = ({
                       <span className="font-bold text-zinc-800">{item.title}</span>
                     </div>
                     <p className="text-2xs text-zinc-400 mt-0.5">
-                      {item.provider} • งวดละ ฿{item.monthlyAmount.toLocaleString()} ({item.totalMonths}/{item.totalMonths} งวด)
+                      {item.provider} • {item.totalMonths} เดือน
                     </p>
                   </div>
 

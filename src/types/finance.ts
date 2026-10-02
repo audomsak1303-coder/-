@@ -24,12 +24,14 @@ export interface InstallmentItem {
   title: string;
   provider: AppProvider;
   customProviderName?: string;
-  monthlyAmount: number;
-  totalMonths: number; // up to 24 or more
-  paidMonths: number; // 0 to totalMonths (if paidMonths === totalMonths, 100% completed)
+  monthlyAmount: number; // Default or average monthly amount
+  totalMonths: number; // 3, 6, 12, 18, 24 (or up to 24)
+  paidMonths: number; // 0 to totalMonths
   currentMonthIndex?: number; // legacy backward compatibility
-  startYear: number; // e.g. 2026
-  startMonth: number; // 1-12
+  isCustomAmounts?: boolean; // true if payments differ per month
+  customMonthlyAmounts?: number[]; // Array of amounts for each installment month 1..N
+  startYear: number;
+  startMonth: number;
   dueDay: number; // 1-31
   totalAmount?: number;
   remainingAmount?: number;

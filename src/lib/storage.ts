@@ -1,9 +1,9 @@
 import { FixedExpense, InstallmentItem, MonthSummary, UserFinancialProfile } from '../types/finance';
 
 const STORAGE_KEYS = {
-  FIXED_EXPENSES: 'thai_finance_fixed_expenses_v2',
-  INSTALLMENTS: 'thai_finance_installments_v2',
-  PROFILE: 'thai_finance_profile_v2',
+  FIXED_EXPENSES: 'thai_finance_fixed_expenses_v3',
+  INSTALLMENTS: 'thai_finance_installments_v3',
+  PROFILE: 'thai_finance_profile_v3',
 };
 
 const THAI_MONTH_NAMES_SHORT = [
@@ -11,7 +11,42 @@ const THAI_MONTH_NAMES_SHORT = [
   'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.',
 ];
 
-// Seed realistic data reflecting the user's explicit apps and expenses
+// Helper to compute payment for an installment's current due month
+export function getInstallmentDueAmount(item: InstallmentItem, monthOffset = 0): number {
+  const paid = typeof item.paidMonths === 'number'
+    ? item.paidMonths
+    : Math.max(0, (item.currentMonthIndex || 1) - 1);
+
+  const installmentIndex = paid + 1 + monthOffset; // 1-based
+  if (installmentIndex > item.totalMonths) return 0;
+
+  if (item.isCustomAmounts && item.customMonthlyAmounts && item.customMonthlyAmounts.length >= installmentIndex) {
+    return item.customMonthlyAmounts[installmentIndex - 1] || 0;
+  }
+  return item.monthlyAmount || 0;
+}
+
+// Helper to compute remaining debt for an item
+export function getInstallmentRemainingDebt(item: InstallmentItem): number {
+  const paid = typeof item.paidMonths === 'number'
+    ? item.paidMonths
+    : Math.max(0, (item.currentMonthIndex || 1) - 1);
+
+  if (paid >= item.totalMonths) return 0;
+
+  if (item.isCustomAmounts && item.customMonthlyAmounts && item.customMonthlyAmounts.length > 0) {
+    let sum = 0;
+    for (let i = paid; i < item.totalMonths; i++) {
+      sum += item.customMonthlyAmounts[i] || item.monthlyAmount || 0;
+    }
+    return sum;
+  }
+
+  const remainingMonths = Math.max(0, item.totalMonths - paid);
+  return item.monthlyAmount * remainingMonths;
+}
+
+// Seed realistic data with 3, 6, 12, 18, 24 months options & unequal payment example
 export const DEFAULT_FIXED_EXPENSES: FixedExpense[] = [
   {
     id: 'fix-1',
@@ -72,57 +107,67 @@ export const DEFAULT_INSTALLMENTS: InstallmentItem[] = [
     provider: 'Shopee',
     monthlyAmount: 950,
     totalMonths: 6,
-    paidMonths: 2, // Paid 2 of 6 (33% done, remaining 4)
+    paidMonths: 2,
     startYear: 2026,
     startMonth: 9,
     dueDay: 1,
     notes: 'ผ่อนดอกเบี้ย 0%',
+    isCustomAmounts: false,
   },
   {
     id: 'inst-2',
-    title: 'Shopee SEasyCash (วงเงินหมุนเวียน)',
+    title: 'Shopee SEasyCash (เงินด่วน ค่างวดลดต้นลดดอก)',
     provider: 'Shopee SEasyCash',
-    monthlyAmount: 2150,
+    monthlyAmount: 2350,
     totalMonths: 12,
-    paidMonths: 4, // Paid 4 of 12 (33% done, remaining 8)
+    paidMonths: 3, // Paid 3 of 12
     startYear: 2026,
     startMonth: 7,
     dueDay: 5,
-    notes: 'หักผ่านบัญชีอัตโนมัติ',
+    notes: 'ลดต้นลดดอก ค่างวดแต่ละเดือนไม่เท่ากัน',
+    isCustomAmounts: true,
+    // Example of unequal per-month installments (12 months):
+    customMonthlyAmounts: [
+      2650, 2580, 2500, 2420, 2350, 2280, 
+      2200, 2130, 2050, 1980, 1900, 1820
+    ],
   },
   {
     id: 'inst-3',
     title: 'Lazada LazPayLater (แท็บเล็ตทำงาน)',
     provider: 'Lazada',
     monthlyAmount: 1420,
-    totalMonths: 10,
-    paidMonths: 3, // Paid 3 of 10 (30% done, remaining 7)
+    totalMonths: 6,
+    paidMonths: 2,
     startYear: 2026,
     startMonth: 8,
     dueDay: 10,
+    isCustomAmounts: false,
   },
   {
     id: 'inst-4',
     title: 'Thisshop T-PayLater (หูฟังไร้สาย & ลำโพง)',
     provider: 'Thisshop',
-    monthlyAmount: 780,
-    totalMonths: 8,
-    paidMonths: 5, // Paid 5 of 8 (63% done, remaining 3)
+    monthlyAmount: 850,
+    totalMonths: 3,
+    paidMonths: 1,
     startYear: 2026,
-    startMonth: 6,
+    startMonth: 9,
     dueDay: 15,
+    isCustomAmounts: false,
   },
   {
     id: 'inst-5',
-    title: 'อิออน AEON (เครื่องซักผ้าและตู้เย็น)',
+    title: 'อิออน AEON (เครื่องซักผ้าและตู้เย็น 24 เดือน)',
     provider: 'AEON',
-    monthlyAmount: 3200,
-    totalMonths: 18,
-    paidMonths: 7, // Paid 7 of 18 (39% done, remaining 11)
+    monthlyAmount: 1850,
+    totalMonths: 24,
+    paidMonths: 6,
     startYear: 2026,
     startMonth: 4,
     dueDay: 2,
-    notes: 'ตัดรอบทุกวันที่ 2 ของเดือน',
+    notes: 'ผ่อนยาว 24 เดือน สบายกระเป๋า',
+    isCustomAmounts: false,
   },
 ];
 
@@ -153,7 +198,6 @@ export const loadInstallments = (): InstallmentItem[] => {
     if (!raw) return DEFAULT_INSTALLMENTS;
     const parsed: InstallmentItem[] = JSON.parse(raw);
     return parsed.map((item) => {
-      // Normalize paidMonths
       const paid = typeof item.paidMonths === 'number' 
         ? item.paidMonths 
         : typeof item.currentMonthIndex === 'number' 
@@ -223,16 +267,24 @@ export function calculate24MonthsForecast(
         return;
       }
 
-      // The evaluated installment for month offset i
-      // At i = 0 (current month), it is the next installment: paid + 1
       const installmentNumberForMonth = paid + 1 + i;
 
       if (installmentNumberForMonth <= item.totalMonths) {
-        installmentTotal += item.monthlyAmount;
+        // Compute this exact month's payment (supports unequal per-month amounts)
+        let monthlyPay = item.monthlyAmount;
+        if (
+          item.isCustomAmounts && 
+          item.customMonthlyAmounts && 
+          item.customMonthlyAmounts.length >= installmentNumberForMonth
+        ) {
+          monthlyPay = item.customMonthlyAmounts[installmentNumberForMonth - 1] ?? item.monthlyAmount;
+        }
+
+        installmentTotal += monthlyPay;
         activeInstallmentsCount++;
 
         const prov = item.provider;
-        byProvider[prov] = (byProvider[prov] || 0) + item.monthlyAmount;
+        byProvider[prov] = (byProvider[prov] || 0) + monthlyPay;
 
         if (installmentNumberForMonth === item.totalMonths) {
           endingInstallments.push(

@@ -1,4 +1,5 @@
 import { FixedExpense, InstallmentItem, MonthSummary } from '../types/finance';
+import { getInstallmentRemainingDebt, getInstallmentDueAmount } from './storage';
 
 export interface CreateSpreadsheetResult {
   spreadsheetId: string;
@@ -162,15 +163,21 @@ async function populateSheetData(
   const installmentRows = installments.map((item, idx) => {
     const paid = item.paidMonths ?? Math.max(0, (item.currentMonthIndex || 1) - 1);
     const remainingMonths = Math.max(0, item.totalMonths - paid);
-    const estRemaining = item.remainingAmount ?? item.monthlyAmount * remainingMonths;
+    const estRemaining = getInstallmentRemainingDebt(item);
     const percent = Math.min(100, Math.round((paid / item.totalMonths) * 100));
-    const statusText = percent >= 100 ? 'ผ่อนครบแล้ว (100%)' : `กำลังผ่อน (งวดที่ ${paid + 1}/${item.totalMonths})`;
+    const isCustomText = item.isCustomAmounts ? ' (ค่างวดไม่เท่ากัน)' : '';
+    const statusText = percent >= 100 
+      ? 'ผ่อนครบแล้ว (100%)' 
+      : `กำลังผ่อน (งวดที่ ${paid + 1}/${item.totalMonths})${isCustomText}`;
+    const monthlyDisplay = item.isCustomAmounts 
+      ? `งวดนี้: ${getInstallmentDueAmount(item, 0)} (ค่างวดปรับตามเดือน)` 
+      : item.monthlyAmount;
 
     return [
       idx + 1,
       item.provider === 'อื่นๆ' ? item.customProviderName || 'อื่นๆ' : item.provider,
       item.title,
-      item.monthlyAmount,
+      monthlyDisplay,
       paid,
       item.totalMonths,
       `${percent}%`,
@@ -183,7 +190,7 @@ async function populateSheetData(
 
   const totalInstallmentMonthly = installments
     .filter((i) => (i.paidMonths ?? 0) < i.totalMonths)
-    .reduce((sum, i) => sum + i.monthlyAmount, 0);
+    .reduce((sum, i) => sum + getInstallmentDueAmount(i, 0), 0);
   installmentRows.push(['', 'รวมค่างวดที่ยังต้องผ่อนเดือนนี้', '', totalInstallmentMonthly, '', '', '', '', '', '', '']);
 
   // Build Sheet 4: 'ผ่อนแยกตามแอพ'
